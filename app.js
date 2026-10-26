@@ -123,7 +123,7 @@ function uint8ToBase64(bytes) {
   return btoa(bin);
 }
 
-async function deriveAesKeyBrowser(password, saltBytes, iterations = 100000) {
+async function deriveAesKeyBrowser(password, saltBytes, iterations = 600000) {
   const enc = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -146,7 +146,7 @@ async function decryptVaultBrowser(vaultObj, password) {
   const salt = base64ToUint8(vaultObj.salt);
   const iv = base64ToUint8(vaultObj.iv);
   const combined = base64ToUint8(vaultObj.ciphertext);
-  const key = await deriveAesKeyBrowser(password, salt, vaultObj.iterations || 100000);
+  const key = await deriveAesKeyBrowser(password, salt, vaultObj.iterations || 600000);
   const decryptedBuf = await window.crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
     key,
@@ -159,7 +159,7 @@ async function decryptVaultBrowser(vaultObj, password) {
 async function encryptVaultBrowser(plainObj, password) {
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveAesKeyBrowser(password, salt, 100000);
+  const key = await deriveAesKeyBrowser(password, salt, 600000);
   const plainBytes = new TextEncoder().encode(JSON.stringify(plainObj));
   const encryptedBuf = await window.crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
@@ -171,7 +171,7 @@ async function encryptVaultBrowser(plainObj, password) {
     version: 1,
     algo: 'AES-256-GCM',
     kdf: 'PBKDF2-SHA256',
-    iterations: 100000,
+    iterations: 600000,
     updatedAt: new Date().toISOString(),
     salt: uint8ToBase64(salt),
     iv: uint8ToBase64(iv),
@@ -477,12 +477,96 @@ function getRecentFindingsHistory() {
   });
 }
 
-async function markFindingStatus(accountId, findingIndex, findingId, newStatus) {
+const COMPLETED_PRESETS = [
+  'Önerilen aksiyonu birebir uyguladım',
+  'Hedef EBM (tCPA) veya Maks. TBM teklifini güncelledim',
+  'Negatif anahtar kelime / eşleşme türü düzenlemesi yaptım',
+  'Günlük bütçe veya konum / yarıçap ayarlarını değiştirdim',
+  'Reklam metnini / PMax öğe grubunu veya politika kısıtını düzelttim',
+  'Dönüşüm sayım (Bir/Her) veya birincil hedef ayarını düzelttim'
+];
+
+const DISMISSED_PRESETS = [
+  'Bilinçli stratejik tercih — şimdilik dokunulmayacak',
+  'Müşteri talebi / bütçe sınırı nedeniyle sabit tutuluyor',
+  'Mevcut dönüşüm maliyeti ve hacmi bizim için yeterli',
+  'Bu öneri hesabın iş modeline / kampanya amacına uygun değil',
+  'Daha önce denendi, verim alınmadığı için eski ayara dönüldü'
+];
+
+let pendingResolutionContext = null;
+
+function openFindingResolutionModal(accountId, findingIndex, findingId, newStatus) {
+  const acc = state.db.accounts.find(a => a.id === accountId);
+  if (!acc || !Array.isArray(acc.findings)) return;
+  const idx = findingId
+    ? acc.findings.findIndex(f => f.id === findingId)
+    : Number(findingIndex);
+  const targetIdx = idx !== -1 ? idx : Number(findingIndex);
+  const finding = acc.findings[targetIdx];
+  if (!finding) return;
+
+  pendingResolutionContext = { accountId, findingIndex: targetIdx, findingId: finding.id, newStatus };
+
+  const modal = document.getElementById('findingResolutionModal');
+  const badge = document.getElementById('resModalBadge');
+  const title = document.getElementById('resModalTitle');
+  const findingTitleBox = document.getElementById('resModalFindingTitle');
+  const optionsLabel = document.getElementById('resOptionsLabel');
+  const optionsList = document.getElementById('resolutionOptionsList');
+  const reopenGroup = document.getElementById('resReopenGroup');
+  const noteLabel = document.getElementById('resNoteLabel');
+  const noteInput = document.getElementById('resolutionNoteInput');
+
+  const isComplete = newStatus === 'completed';
+  badge.textContent = isComplete ? `${acc.name.toUpperCase()} · TAMAMLANDI KAYDI` : `${acc.name.toUpperCase()} · YOKSAY / ERTELE KAYDI`;
+  title.textContent = isComplete ? '✓ Hangi Aksiyonu Uyguladınız?' : '✕ Neden Yoksayıldı / Ertelendi?';
+  findingTitleBox.textContent = finding.title;
+  optionsLabel.textContent = isComplete
+    ? 'Yaptığınız İşlemi Seçin (Sistem sonraki denetimlerde etkisini takip eder)'
+    : 'Yoksayma Sebebini Seçin (Sistem kararınıza saygı duyar)';
+  noteLabel.textContent = isComplete
+    ? '+1 Serbest Metin: Tam olarak ne değiştirdiniz? (Opsiyonel)'
+    : '+1 Serbest Metin: Neden yoksayıldı veya özel koşulunuz nedir? (Opsiyonel)';
+  noteInput.value = '';
+  noteInput.placeholder = isComplete
+    ? 'Örn: Maks. TBM sınırını 15 TL\'den 20 TL\'ye çıkardım, 3 gün izlenecek...'
+    : 'Örn: İşletme sahibi bütçeyi şimdilik artırmak istemiyor, günlük dönüşüm 20\'nin altına inmedikçe uyarma...';
+
+  if (isComplete) {
+    reopenGroup.classList.add('hidden');
+  } else {
+    reopenGroup.classList.remove('hidden');
+    document.getElementById('resolutionReopenSelect').value = 'auto_threshold';
+  }
+
+  const presets = isComplete ? COMPLETED_PRESETS : DISMISSED_PRESETS;
+  optionsList.innerHTML = presets.map((opt, i) => `
+    <label style="display:flex; align-items:center; gap:0.55rem; padding:0.48rem 0.65rem; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:6px; cursor:pointer; font-size:0.82rem;">
+      <input type="radio" name="resolutionReasonRadio" value="${opt.replace(/"/g, '&quot;')}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--crimson);" />
+      <span>${opt}</span>
+    </label>
+  `).join('');
+
+  modal.classList.remove('hidden');
+}
+
+async function markFindingStatus(accountId, findingIndex, findingId, newStatus, resolutionMeta = null) {
+  // Tamamlandı veya Yoksay tıklandığında önce sebep & serbest metin penceresini aç
+  if ((newStatus === 'completed' || newStatus === 'dismissed') && !resolutionMeta) {
+    openFindingResolutionModal(accountId, findingIndex, findingId, newStatus);
+    return;
+  }
+
+  const resolutionReason = resolutionMeta?.resolutionReason || null;
+  const resolutionNote = resolutionMeta?.resolutionNote || null;
+  const reopenIf = resolutionMeta?.reopenIf || (newStatus === 'dismissed' ? 'auto_threshold' : null);
+
   if (isLocalhost()) {
     const res = await fetch('/api/findings/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId, findingIndex, findingId, newStatus })
+      body: JSON.stringify({ accountId, findingIndex, findingId, newStatus, resolutionReason, resolutionNote, reopenIf })
     });
     const data = await res.json();
     if (data.db) {
@@ -522,6 +606,9 @@ async function markFindingStatus(accountId, findingIndex, findingId, newStatus) 
     if (isNaN(targetIdx) || !acc.findings[targetIdx]) return;
 
     const removed = acc.findings.splice(targetIdx, 1)[0];
+    const snoozeUntil = reopenIf === 'never_30d'
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
     state.db.findingsHistory.unshift({
       ...removed,
       id: removed.id || `f-${acc.id}-${Date.now()}`,
@@ -532,6 +619,10 @@ async function markFindingStatus(accountId, findingIndex, findingId, newStatus) 
       createdAt: removed.createdAt || state.db.settings?.lastAuditDate || new Date().toISOString(),
       resolvedAt: new Date().toISOString(),
       resolvedStatus: newStatus,
+      resolutionReason: resolutionReason,
+      resolutionNote: resolutionNote,
+      reopenIf: reopenIf,
+      snoozeUntil: snoozeUntil,
       metricsSnapshot: {
         capturedAt: new Date().toISOString(),
         spend5dTl: acc.spend5dTl ?? 0,
@@ -674,8 +765,23 @@ function renderFindings() {
          </div>`
       : '';
 
+    const reopenLabels = {
+      auto_threshold: 'EBM %20+ artarsa veya dönüşüm %25+ düşerse tekrar uyar',
+      cpa_above_target: 'Sadece EBM hedef sınırı aşarsa tekrar uyar',
+      conv_drop_25: 'Sadece dönüşüm %25+ düşerse tekrar uyar',
+      never_30d: '30 gün boyunca bu konuda uyarma'
+    };
+
+    const reasonHtml = (isHistoryView && (f.resolutionReason || f.resolutionNote))
+      ? `<div style="margin-top:0.4rem; font-size:0.74rem; color:var(--text-primary); background:rgba(16,185,129,0.07); padding:0.32rem 0.55rem; border-radius:4px; border-left:3px solid var(--emerald);">
+           <strong>${f.resolvedStatus === 'completed' ? '🛠️ Uygulanan İşlem:' : '📌 Yoksayma Sebebi:'}</strong> ${f.resolutionReason || 'Belirtilmedi'}
+           ${f.resolutionNote ? `<div style="margin-top:0.15rem; color:var(--text-secondary);">💬 <em>"${f.resolutionNote}"</em></div>` : ''}
+           ${f.resolvedStatus === 'dismissed' && f.reopenIf ? `<div style="margin-top:0.15rem; font-size:0.69rem; color:var(--text-muted);">🔔 Yeniden Uyarılma Kuralı: ${reopenLabels[f.reopenIf] || f.reopenIf}</div>` : ''}
+         </div>`
+      : '';
+
     const snapInfo = (isHistoryView && f.metricsSnapshot)
-      ? `<div style="margin-top:0.4rem; font-size:0.72rem; color:var(--text-muted); background:rgba(255,255,255,0.03); padding:0.25rem 0.5rem; border-radius:4px; border:1px solid var(--border-subtle);">
+      ? `<div style="margin-top:0.35rem; font-size:0.72rem; color:var(--text-muted); background:rgba(255,255,255,0.03); padding:0.25rem 0.5rem; border-radius:4px; border:1px solid var(--border-subtle);">
            📸 <strong>Karar Anı Baz Metrik:</strong> Saf Lead EBM: ₺${f.metricsSnapshot.leadCpaTl ?? f.metricsSnapshot.currentCpaTl ?? '—'} · 5G Lead Dönüşüm: ${f.metricsSnapshot.leadConversions5d ?? f.metricsSnapshot.conversions5d ?? 0} · 5G Harcama: ₺${f.metricsSnapshot.spend5dTl ?? 0}
          </div>`
       : '';
@@ -692,6 +798,7 @@ function renderFindings() {
           ${relatedBadge}
           <h3 class="finding-title">${f.title}</h3>
           <p class="finding-detail">${f.detail}</p>
+          ${reasonHtml}
           ${snapInfo}
         </div>
         <div class="finding-action-col">
@@ -903,10 +1010,32 @@ function renderAccountDetailModal(id) {
     const cCpc = (cSpend / cClicks).toFixed(1);
     const cCpa = cConv > 0 ? Math.round(cSpend / cConv) : cSpend;
     const typeLabel = c.type === 'PERFORMANCE_MAX' ? 'PMax' : (c.type === 'SEARCH' ? 'Arama' : (c.type || 'Aktif'));
-    const lostTxt = c.budgetLostShare != null ? ` · Bütçe Kaybı: %${c.budgetLostShare}` : '';
-    const rankTxt = c.rankLostShare != null ? ` · Sıra Kaybı: %${c.rankLostShare}` : '';
+    const lostTxt = c.budgetLostShare != null ? ` · Bütçe Kaybı: ${c.budgetLostShare === 90 ? '≥%90' : '%' + c.budgetLostShare}` : '';
+    const rankTxt = c.rankLostShare != null ? ` · Sıra Kaybı: ${c.rankLostShare === 90 ? '≥%90' : '%' + c.rankLostShare}` : '';
     const budgetTxt = c.dailyBudgetTl != null ? ` · Günlük Bütçe: ₺${c.dailyBudgetTl}` : '';
+    const tcpaTxt = c.targetCpaTl != null ? ` · Hedef EBM: ₺${c.targetCpaTl}` : (c.targetRoas != null ? ` · Hedef ROAS: ${c.targetRoas}` : '');
     const geoTxt = c.positiveGeoTargetType === 'PRESENCE_OR_INTEREST' ? ` · ⚠️ Konum: İlgi Dahil` : (c.positiveGeoTargetType === 'PRESENCE' ? ` · Konum: Sadece Bulunanlar` : '');
+
+    const reasonLabels = {
+      BUDGET_CONSTRAINED: 'Bütçeyle Sınırlı',
+      SEARCH_VOLUME_LIMITED: 'Arama Hacmiyle Sınırlı',
+      BIDDING_STRATEGY_CONSTRAINED: 'Hedefle/Teklifle Sınırlı',
+      BIDDING_STRATEGY_LEARNING: 'Öğreniyor',
+      HAS_ASSET_GROUPS_LIMITED_BY_POLICY: 'Politika Kısıtlı (Öğe Grubu)',
+      AD_GROUPS_PAUSED: 'Reklam Grupları Duraklatıldı'
+    };
+    const statusReasons = Array.isArray(c.primaryStatusReasons) && c.primaryStatusReasons.length > 0
+      ? c.primaryStatusReasons.map(r => reasonLabels[r] || r).join(', ')
+      : (c.primaryStatus === 'LEARNING' ? 'Öğreniyor' : (c.primaryStatus === 'ELIGIBLE' ? 'Uygun' : (c.primaryStatus || '')));
+    const statusBadge = statusReasons
+      ? `<span style="display:inline-block; margin-left:0.4rem; padding:0.08rem 0.4rem; border-radius:4px; font-size:0.66rem; background:${c.primaryStatus === 'ELIGIBLE' && (!c.primaryStatusReasons || c.primaryStatusReasons.length === 0) ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.16)'}; color:${c.primaryStatus === 'ELIGIBLE' && (!c.primaryStatusReasons || c.primaryStatusReasons.length === 0) ? 'var(--emerald)' : '#F59E0B'};">${statusReasons}</span>`
+      : '';
+
+    const locSum = c.locationSummary;
+    const locSumHtml = locSum && ((locSum.locations && locSum.locations.length > 0) || locSum.proximityCount > 0)
+      ? `<div style="font-size:0.69rem; color:var(--text-secondary); margin-top:2px;">📍 Konum: ${(locSum.locations || []).slice(0, 6).join(', ')}${(locSum.locations || []).length > 6 ? ' +' + (locSum.locations.length - 6) + ' ilçe' : ''}${locSum.proximityCount > 0 ? ` · ⭕ ${locSum.proximityCount} Çember (${(locSum.proximityRadii || []).slice(0, 3).join(', ')})` : ''}</div>`
+      : '';
+
     const campConvTxt = Array.isArray(c.conversionBreakdown) && c.conversionBreakdown.length > 0
       ? `<div style="font-size:0.7rem; color:var(--emerald); margin-top:2px;">🎯 Üretilen Dönüşüm: ${c.conversionBreakdown.map(cb => `${cb.action} (${cb.count5d})`).join(', ')}</div>`
       : '';
@@ -914,8 +1043,9 @@ function renderAccountDetailModal(id) {
     return `
       <tr>
         <td>
-          <strong>${c.name}</strong>
-          <div style="font-size:0.72rem; color:var(--text-muted);">${typeLabel}${budgetTxt}${lostTxt}${rankTxt}${geoTxt}</div>
+          <strong>${c.name}</strong>${statusBadge}
+          <div style="font-size:0.72rem; color:var(--text-muted);">${typeLabel}${budgetTxt}${tcpaTxt}${lostTxt}${rankTxt}${geoTxt}</div>
+          ${locSumHtml}
           ${campConvTxt}
         </td>
         <td><span style="color:var(--emerald); font-family:var(--font-mono); font-size:0.72rem;">${typeLabel.toUpperCase()}</span></td>
@@ -1402,19 +1532,65 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Ayarlar
-  document.getElementById('btnOpenSettings').addEventListener('click', () => {
+  document.getElementById('btnOpenSettings').addEventListener('click', async () => {
     const { settings } = state.db;
     document.getElementById('setAiModel').value = settings.aiModel || 'gemini-3-flash-preview';
     document.getElementById('setEmail').value = settings.emailRecipient || '';
     document.getElementById('setIgnoredIds').value = (settings.ignoredCustomerIds || []).join(', ');
     const ghInput = document.getElementById('setGithubToken');
     if (ghInput) ghInput.value = getStoredToken();
-    document.getElementById('mccScriptPreview').textContent = MCC_SCRIPT_SNIPPET;
+    const previewEl = document.getElementById('mccScriptPreview');
+    previewEl.textContent = 'Güncel v3.3 MCC Script yükleniyor...';
     document.getElementById('settingsModal').classList.remove('hidden');
+
+    try {
+      if (isLocalhost()) {
+        const res = await fetch('/api/mcc-script');
+        const data = await res.json();
+        if (data.code) previewEl.textContent = data.code;
+      } else {
+        const token = getStoredToken();
+        if (token) {
+          const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/scripts/google-ads-mcc-script.js?ref=main&t=${Date.now()}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.raw+json' }
+          });
+          if (res.ok) previewEl.textContent = await res.text();
+        }
+      }
+    } catch (e) {
+      previewEl.textContent = MCC_SCRIPT_SNIPPET;
+    }
   });
 
   document.getElementById('closeSettingsModal').addEventListener('click', () => {
     document.getElementById('settingsModal').classList.add('hidden');
+  });
+
+  // Tamamlandı / Yoksay Sebep & Aksiyon Hafızası Modalı
+  const closeResModal = () => {
+    document.getElementById('findingResolutionModal')?.classList.add('hidden');
+    pendingResolutionContext = null;
+  };
+  document.getElementById('closeResolutionModal')?.addEventListener('click', closeResModal);
+  document.getElementById('btnCancelResolution')?.addEventListener('click', closeResModal);
+
+  document.getElementById('findingResolutionForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!pendingResolutionContext) return;
+    const selectedRadio = document.querySelector('input[name="resolutionReasonRadio"]:checked');
+    const resolutionReason = selectedRadio ? selectedRadio.value : '';
+    const resolutionNote = (document.getElementById('resolutionNoteInput')?.value || '').trim();
+    const reopenIf = pendingResolutionContext.newStatus === 'dismissed'
+      ? (document.getElementById('resolutionReopenSelect')?.value || 'auto_threshold')
+      : null;
+
+    const ctx = { ...pendingResolutionContext };
+    closeResModal();
+    await markFindingStatus(ctx.accountId, ctx.findingIndex, ctx.findingId, ctx.newStatus, {
+      resolutionReason,
+      resolutionNote,
+      reopenIf
+    });
   });
 
   document.getElementById('settingsForm').addEventListener('submit', async e => {
