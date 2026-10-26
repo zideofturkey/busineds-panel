@@ -214,8 +214,9 @@ async function saveDbToGitHub(updatedDb, commitMessage) {
     alert('Bulut panel üzerinden değişiklik kaydetmek için sağ üstteki "Ayarlar & Script" menüsünden GitHub Token (ghp_...) bilginizi bir kez girin.');
     return false;
   }
-  const vaultPw = getStoredVaultPassword();
-  const payloadToSave = vaultPw ? await encryptVaultBrowser(updatedDb, vaultPw) : updatedDb;
+  // Repo artık tamamen PRIVATE olduğu için doğrudan temiz JSON kaydedilir (eski tarayıcı şifreleme anahtarı varsa temizle)
+  localStorage.removeItem('busineds_vault_pw');
+  const payloadToSave = updatedDb;
 
   const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_DATA_FILE}`;
   const headers = {
@@ -469,10 +470,10 @@ function formatFindingDate(isoStr) {
 
 function getRecentFindingsHistory() {
   const history = Array.isArray(state.db?.findingsHistory) ? state.db.findingsHistory : [];
-  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
   return history.filter(item => {
     const ts = new Date(item.resolvedAt || item.createdAt || Date.now()).getTime();
-    return (Date.now() - ts) < thirtyDaysMs;
+    return (Date.now() - ts) < ninetyDaysMs;
   });
 }
 
@@ -530,7 +531,31 @@ async function markFindingStatus(accountId, findingIndex, findingId, newStatus) 
       customerId: acc.customerId,
       createdAt: removed.createdAt || state.db.settings?.lastAuditDate || new Date().toISOString(),
       resolvedAt: new Date().toISOString(),
-      resolvedStatus: newStatus
+      resolvedStatus: newStatus,
+      metricsSnapshot: {
+        capturedAt: new Date().toISOString(),
+        spend5dTl: acc.spend5dTl ?? 0,
+        conversions5d: acc.conversions5d ?? 0,
+        leadConversions5d: acc.leadConversions5d ?? acc.conversions5d ?? 0,
+        mapConversions5d: acc.mapConversions5d ?? 0,
+        currentCpaTl: acc.currentCpaTl ?? null,
+        leadCpaTl: acc.leadCpaTl ?? acc.currentCpaTl ?? null,
+        targetCpaTl: acc.targetCpaTl ?? null,
+        impressionSharePercent: acc.impressionSharePercent ?? null,
+        budgetLostSharePercent: acc.budgetLostSharePercent ?? null,
+        rankLostSharePercent: acc.rankLostSharePercent ?? null,
+        absTopImpPercent: acc.absTopImpPercent ?? null,
+        campaigns: (acc.campaigns || []).map(c => ({
+          name: c.name,
+          status: c.status,
+          primaryStatus: c.primaryStatus,
+          dailyBudgetTl: c.dailyBudgetTl,
+          targetCpaTl: c.targetCpaTl,
+          spend5d: c.spend5d,
+          conversions5d: c.conversions5d,
+          impressions5d: c.impressions5d
+        }))
+      }
     });
   }
 
@@ -641,6 +666,20 @@ function renderFindings() {
            <button class="finding-act-btn dismiss" onclick="markFindingStatus('${f.accountId}', ${f.findingIndex}, '${safeId}', 'dismissed')" title="Yoksay (30 gün Yoksayılan sekmesinde saklanır)">✕ Yoksay</button>
          </div>`;
 
+    const relatedBadge = f.relatedHistoryTitle
+      ? `<div style="margin-bottom:0.35rem;">
+           <span style="display:inline-block; background:rgba(255,49,71,0.12); color:#FF3147; border:1px solid rgba(255,49,71,0.3); border-radius:4px; padding:0.15rem 0.5rem; font-size:0.7rem; font-weight:700;">
+             🔗 İLİŞKİLİ GEÇMİŞ KARAR: ${f.relatedHistoryTitle}
+           </span>
+         </div>`
+      : '';
+
+    const snapInfo = (isHistoryView && f.metricsSnapshot)
+      ? `<div style="margin-top:0.4rem; font-size:0.72rem; color:var(--text-muted); background:rgba(255,255,255,0.03); padding:0.25rem 0.5rem; border-radius:4px; border:1px solid var(--border-subtle);">
+           📸 <strong>Karar Anı Baz Metrik:</strong> Saf Lead EBM: ₺${f.metricsSnapshot.leadCpaTl ?? f.metricsSnapshot.currentCpaTl ?? '—'} · 5G Lead Dönüşüm: ${f.metricsSnapshot.leadConversions5d ?? f.metricsSnapshot.conversions5d ?? 0} · 5G Harcama: ₺${f.metricsSnapshot.spend5dTl ?? 0}
+         </div>`
+      : '';
+
     return `
       <article class="finding-row sev-${f.severity} ${isHistoryView ? 'is-resolved' : ''}">
         <div class="finding-meta-col">
@@ -650,8 +689,10 @@ function renderFindings() {
         </div>
         <div class="finding-body-col">
           <span class="finding-cat">${f.category}</span>
+          ${relatedBadge}
           <h3 class="finding-title">${f.title}</h3>
           <p class="finding-detail">${f.detail}</p>
+          ${snapInfo}
         </div>
         <div class="finding-action-col">
           <div class="finding-top-bar">
