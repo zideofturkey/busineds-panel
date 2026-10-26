@@ -373,6 +373,47 @@
     </div>
   </div>
 
+  <!-- Modal: Tamamlandı / Yoksay Sebep & Aksiyon Hafızası Seçimi -->
+  <div class="modal-backdrop hidden" id="findingResolutionModal" style="z-index: 1500;">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div>
+          <span class="detail-cid" id="resModalBadge">AKSİYON HAFIZASI KAYDI</span>
+          <h3 class="modal-title" id="resModalTitle">Aksiyon Kaydı</h3>
+        </div>
+        <button class="modal-close" id="closeResolutionModal">&times;</button>
+      </div>
+      <form id="findingResolutionForm" class="modal-form">
+        <p id="resModalFindingTitle" style="font-size:0.83rem; color:var(--text-secondary); margin:0 0 0.65rem 0; padding:0.5rem 0.65rem; background:rgba(255,255,255,0.03); border-left:3px solid var(--crimson); border-radius:4px;"></p>
+
+        <div class="form-group">
+          <label id="resOptionsLabel">Hazır Seçenekler (Birini Seçin)</label>
+          <div id="resolutionOptionsList" style="display:flex; flex-direction:column; gap:0.42rem; margin-top:0.25rem;"></div>
+        </div>
+
+        <div class="form-group hidden" id="resReopenGroup" style="margin-top:0.5rem;">
+          <label>Hangi Durumda Yeniden Uyarılsın?</label>
+          <select id="resolutionReopenSelect">
+            <option value="auto_threshold">EBM %20+ artarsa veya dönüşüm %25+ düşerse tekrar uyar (Önerilen)</option>
+            <option value="cpa_above_target">Sadece EBM hedef sınırı aşarsa tekrar uyar</option>
+            <option value="conv_drop_25">Sadece dönüşüm hacmi %25+ düşerse tekrar uyar</option>
+            <option value="never_30d">30 gün boyunca bu konuda hiç uyarı üretme</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-top:0.5rem;">
+          <label id="resNoteLabel">+1 Serbest Metin / Ek Detay (Opsiyonel)</label>
+          <textarea id="resolutionNoteInput" rows="2" placeholder="Örn: Maks. TBM'yi 15 TL'den 20 TL'ye çıkardım, 3 gün sonra tekrar bakılacak..."></textarea>
+        </div>
+
+        <div class="modal-footer" style="padding-top:0.5rem;">
+          <button type="button" class="btn btn-outline" id="btnCancelResolution">Vazgeç</button>
+          <button type="submit" class="btn btn-crimson" id="btnConfirmResolution">Kaydet &amp; Hafızaya İşle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Özel Depo (Private Repo) Erişim Kilidi Modalı -->
   <div class="modal-backdrop hidden" id="vaultModal" style="background: rgba(12, 15, 20, 0.96); z-index: 2000;">
     <div class="modal-card" style="max-width: 460px;">
