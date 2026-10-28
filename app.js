@@ -1262,149 +1262,82 @@ function downloadReportPdf(reportId) {
   const printBox = document.getElementById('printableReportContainer');
 
   const sevMeta = {
-    critical: {
-      label: 'KRİTİK MÜDAHALE',
-      border: '#E11D48',
-      badgeBg: '#FFE4E6',
-      badgeText: '#BE123C',
-      badgeBorder: '#FDA4AF',
-      cardBg: '#FFFBFB',
-      actionBg: '#FFF1F2'
-    },
-    warning: {
-      label: 'UYARI',
-      border: '#D97706',
-      badgeBg: '#FEF3C7',
-      badgeText: '#B45309',
-      badgeBorder: '#FCD34D',
-      cardBg: '#FFFFFF',
-      actionBg: '#FFFBEB'
-    },
-    suggestion: {
-      label: 'BÜYÜME ÖNERİSİ',
-      border: '#059669',
-      badgeBg: '#D1FAE5',
-      badgeText: '#047857',
-      badgeBorder: '#6EE7B7',
-      cardBg: '#FFFFFF',
-      actionBg: '#ECFDF5'
-    }
+    critical:   { label: 'KRİTİK', color: '#E11D48' },
+    warning:    { label: 'UYARI',  color: '#D97706' },
+    suggestion: { label: 'ÖNERİ',  color: '#059669' }
   };
 
   const findingsHtml = approved.map((acc, accIdx) => {
-    const numStr = String(accIdx + 1).padStart(2, '0');
     const effCpa = acc.leadCpaTl != null ? acc.leadCpaTl : acc.currentCpaTl;
     const isOverCpa = acc.targetCpaTl != null && effCpa != null && effCpa > acc.targetCpaTl;
-    const cpaColor = isOverCpa ? '#BE123C' : '#047857';
-    const cpaBg = isOverCpa ? '#FFE4E6' : '#D1FAE5';
+    const fList = acc.findings || [];
 
-    const items = (acc.findings || []).map(f => {
+    const items = fList.map((f, fIdx) => {
       const m = sevMeta[f.severity] || sevMeta.warning;
-      const historyBadge = f.relatedHistoryTitle
-        ? `<span style="display:inline-block; background:#E2E8F0; color:#1E293B; font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:4px; margin-left:6px;">GEÇMİŞ KARAR: ${f.relatedHistoryTitle}</span>`
+      const isLast = fIdx === fList.length - 1;
+      const historyNote = f.relatedHistoryTitle
+        ? `<span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#64748B; margin-left:6px;">[Geçmiş Karar: ${f.relatedHistoryTitle}]</span>`
         : '';
 
       return `
-        <div class="rep-finding-card" style="background:${m.cardBg}; border:1px solid #CBD5E1; border-left:4px solid ${m.border}; border-radius:6px; padding:11px 14px; margin-bottom:10px;">
-          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
-            <span style="display:inline-block; background:${m.badgeBg}; color:${m.badgeText}; border:1px solid ${m.badgeBorder}; font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; letter-spacing:0.05em; padding:2px 8px; border-radius:4px;">
-              ${m.label}
-            </span>
-            <span style="display:inline-block; background:#F1F5F9; color:#334155; border:1px solid #CBD5E1; font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; padding:2px 8px; border-radius:4px;">
-              ${f.category || 'GENEL DENETİM'}
-            </span>
-            ${historyBadge}
+        <div class="rep-finding-card" style="border-left:3px solid ${m.color}; padding:2px 0 10px 12px; margin-bottom:${isLast ? '0' : '10px'}; ${isLast ? '' : 'border-bottom:1px solid #E5E7EB;'}">
+          <div style="font-size:13.5px; line-height:1.4; color:#0F172A; margin-bottom:3px;">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:700; color:${m.color}; letter-spacing:0.04em;">${m.label}</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#64748B;"> · ${f.category || 'Genel'} — </span>
+            <strong style="font-family:'Newsreader',Georgia,serif; font-size:15px; font-weight:600; color:#0F172A;">${f.title}</strong>
+            ${historyNote}
           </div>
-          <div style="font-family:'Newsreader',Georgia,serif; font-size:15px; font-weight:600; color:#0F172A; line-height:1.3; margin-bottom:5px;">
-            ${f.title}
-          </div>
-          <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; color:#334155; line-height:1.55; margin-bottom:8px;">
+          <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; color:#334155; line-height:1.55; margin-bottom:4px;">
             ${f.detail}
           </div>
-          <div style="background:${m.actionBg}; border:1px solid #E2E8F0; border-left:3px solid ${m.border}; border-radius:4px; padding:7px 10px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; color:#0F172A; line-height:1.45;">
-            <strong style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.05em; color:${m.badgeText}; text-transform:uppercase; margin-right:6px;">AKSİYON PLANI &rarr;</strong>
-            ${f.action}
+          <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; color:#1E293B; line-height:1.5;">
+            <strong style="color:${m.color}; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.03em;">AKSİYON:</strong>
+            <span style="font-style:italic;"> ${f.action}</span>
           </div>
         </div>
       `;
     }).join('');
 
     return `
-      <section class="rep-account-block" style="margin-bottom:24px;">
-        <div class="rep-account-header" style="background:#1D232C; color:#F8FAFC; border-top:3px solid #FF3147; border-radius:6px; padding:12px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="flex:1; min-width:240px;">
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span style="background:#FF3147; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">#${numStr}</span>
-              <span style="font-family:'Newsreader',Georgia,serif; font-size:18px; font-weight:600; color:#FFFFFF;">${acc.name}</span>
-              <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#94A3B8;">(${acc.customerId})</span>
-            </div>
-            <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:11.5px; color:#CBD5E1; margin-top:3px;">
-              ${acc.sector}
+      <section class="rep-account-block" style="margin-bottom:26px;">
+        <div class="rep-account-header" style="background:#F1F5F9; border-top:2px solid #1D232C; border-left:4px solid #1D232C; padding:9px 14px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+            <div style="font-family:'Newsreader',Georgia,serif; font-size:17.5px; font-weight:600; color:#0F172A;">
+              ${accIdx + 1}. ${acc.name}
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:400; color:#64748B;">(${acc.customerId})</span>
+              <span style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; font-weight:400; color:#475569;"> — ${acc.sector}</span>
             </div>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <div style="background:#262E3A; border:1px solid rgba(255,255,255,0.12); padding:5px 10px; border-radius:4px; text-align:right;">
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:#94A3B8; text-transform:uppercase;">5G HARCAMA</div>
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; color:#FFFFFF;">${formatTl(acc.spend5dTl)}</div>
-            </div>
-            <div style="background:#262E3A; border:1px solid rgba(255,255,255,0.12); padding:5px 10px; border-radius:4px; text-align:right;">
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:#94A3B8; text-transform:uppercase;">5G DÖNÜŞÜM</div>
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; color:#FFFFFF;">${acc.conversions5d}</div>
-            </div>
-            <div style="background:#262E3A; border:1px solid rgba(255,255,255,0.12); padding:5px 10px; border-radius:4px; text-align:right;">
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:#94A3B8; text-transform:uppercase;">HEDEF EBM</div>
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; color:#FFFFFF;">₺${acc.targetCpaTl ?? '—'}</div>
-            </div>
-            <div style="background:${cpaBg}; border:1px solid ${cpaColor}; padding:5px 10px; border-radius:4px; text-align:right;">
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:${cpaColor}; font-weight:700; text-transform:uppercase;">MEVCUT EBM</div>
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:700; color:${cpaColor};">₺${effCpa ?? '—'}</div>
-            </div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#475569; margin-top:4px;">
+            5G Harcama: <strong style="color:#0F172A;">${formatTl(acc.spend5dTl)}</strong>
+            &nbsp;|&nbsp; 5G Dönüşüm: <strong style="color:#0F172A;">${acc.conversions5d}</strong>
+            &nbsp;|&nbsp; Hedef EBM: <strong style="color:#0F172A;">₺${acc.targetCpaTl ?? '—'}</strong>
+            &nbsp;|&nbsp; Mevcut EBM: <strong style="color:${isOverCpa ? '#E11D48' : '#059669'};">₺${effCpa ?? '—'}</strong>
           </div>
         </div>
-        <div>${items}</div>
+        <div style="padding-left:4px;">${items}</div>
       </section>
     `;
   }).join('');
 
   printBox.innerHTML = `
-    <div style="background:#1D232C; color:#FFFFFF; padding:18px 22px; border-bottom:4px solid #FF3147; border-radius:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
-      <div>
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.14em; color:#FF3147; font-weight:700; text-transform:uppercase; margin-bottom:4px;">
-          BUSINED’S — OTONOM GOOGLE ADS DENETİM RAPORU
-        </div>
-        <h1 style="font-family:'Instrument Serif',Georgia,serif; font-size:30px; font-weight:400; margin:0; color:#F3EFEA; line-height:1.1;">
-          ${rep.title}
-        </h1>
+    <div style="border-bottom:2px solid #1D232C; padding-bottom:12px; margin-bottom:14px;">
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.14em; color:#FF3147; font-weight:700; text-transform:uppercase;">
+        BUSINED’S — 5 GÜNLÜK DENETİM RAPORU
       </div>
-      <div style="text-align:right; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#CBD5E1;">
-        <div>DÖNEM: <strong style="color:#FFFFFF;">${rep.period}</strong></div>
-        <div style="margin-top:2px;">İNCELENEN: <strong style="color:#FFFFFF;">${rep.accountsAudited} ONAYLI HESAP</strong></div>
-      </div>
-    </div>
-
-    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:14px;">
-      <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-top:3px solid #1D232C; border-radius:6px; padding:10px 12px;">
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#475569; text-transform:uppercase;">TOPLAM 5G HARCAMA</div>
-        <div style="font-family:'Newsreader',Georgia,serif; font-size:20px; font-weight:600; color:#0F172A; margin-top:2px;">${formatTl(rep.totalSpendTl)}</div>
-      </div>
-      <div style="background:#FFF1F2; border:1px solid #FECDD3; border-top:3px solid #E11D48; border-radius:6px; padding:10px 12px;">
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#BE123C; font-weight:600; text-transform:uppercase;">KRİTİK MÜDAHALE</div>
-        <div style="font-family:'Newsreader',Georgia,serif; font-size:20px; font-weight:700; color:#BE123C; margin-top:2px;">${rep.criticalCount} Bulgu</div>
-      </div>
-      <div style="background:#FFFBEB; border:1px solid #FDE68A; border-top:3px solid #D97706; border-radius:6px; padding:10px 12px;">
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#B45309; font-weight:600; text-transform:uppercase;">PERFORMANS UYARISI</div>
-        <div style="font-family:'Newsreader',Georgia,serif; font-size:20px; font-weight:700; color:#B45309; margin-top:2px;">${rep.warningCount} Bulgu</div>
-      </div>
-      <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-top:3px solid #059669; border-radius:6px; padding:10px 12px;">
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#047857; font-weight:600; text-transform:uppercase;">BÜYÜME ÖNERİSİ</div>
-        <div style="font-family:'Newsreader',Georgia,serif; font-size:20px; font-weight:700; color:#047857; margin-top:2px;">${rep.suggestionCount} Öneri</div>
+      <h1 style="font-family:'Newsreader',Georgia,serif; font-size:26px; font-weight:600; margin:4px 0; color:#0F172A;">
+        ${rep.title}
+      </h1>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#475569;">
+        Dönem: <strong style="color:#0F172A;">${rep.period}</strong>
+        &nbsp;|&nbsp; İncelenen Hesap: <strong style="color:#0F172A;">${rep.accountsAudited}</strong>
+        &nbsp;|&nbsp; Toplam Harcama: <strong style="color:#0F172A;">${formatTl(rep.totalSpendTl)}</strong>
+        &nbsp;|&nbsp; <span style="color:#E11D48; font-weight:600;">${rep.criticalCount} Kritik</span> · <span style="color:#D97706; font-weight:600;">${rep.warningCount} Uyarı</span> · <span style="color:#059669; font-weight:600;">${rep.suggestionCount} Öneri</span>
       </div>
     </div>
-
-    <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-left:4px solid #1D232C; border-radius:6px; padding:10px 14px; margin-bottom:20px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; color:#1E293B; line-height:1.5;">
-      <strong style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#0F172A;">YÖNETİCİ ÖZETİ:</strong> ${rep.summary}
-    </div>
-
+    <p style="font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; color:#334155; line-height:1.55; margin:0 0 20px 0;">
+      <strong style="color:#0F172A;">Özet:</strong> ${rep.summary}
+    </p>
     ${findingsHtml}
   `;
 
