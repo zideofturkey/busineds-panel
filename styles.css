@@ -986,18 +986,41 @@ body {
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   body > *:not(#printableReportContainer) {
     display: none !important;
   }
   body {
     background: #FFFFFF !important;
-    color: #1D232C !important;
+    color: #0F172A !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
   #printableReportContainer {
     display: block !important;
-    padding: 2rem;
-    font-family: 'Newsreader', Georgia, serif;
+    padding: 0 !important;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #0F172A;
+  }
+  .rep-account-block {
+    margin-bottom: 22px;
+  }
+  .rep-account-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .rep-finding-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
